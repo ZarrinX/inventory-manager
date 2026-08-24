@@ -1,0 +1,23 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_db: str = "inventory"
+    postgres_user: str = "inventory"
+    postgres_password: str = "change-me"
+
+    scanner_device_path: str = "/dev/input/by-id/usb-Scanner_Barcode_0215-event-kbd"
+
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql+psycopg2://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+
+settings = Settings()

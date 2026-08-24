@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Inventory Manager</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Inventory Manager</h1>
+    <div id="scan-status" class="status">Waiting for scan…</div>
+  </header>
+
+  <section id="scan-panel" hidden>
+    <h2>Last Scan: <span id="scan-upc"></span></h2>
+    <div id="scan-known">
+      <p><strong id="scan-name"></strong> — qty: <span id="scan-qty"></span></p>
+      <button data-delta="1" class="adjust-btn">+1</button>
+      <button data-delta="-1" class="adjust-btn">-1</button>
+    </div>
+    <div id="scan-unknown" hidden>
+      <p>No item found for this UPC.</p>
+      <form id="new-item-form">
+        <input type="text" name="name" placeholder="Item name" required />
+        <input type="number" name="quantity" placeholder="Quantity" value="1" min="0" required />
+        <button type="submit">Add Item</button>
+      </form>
+    </div>
+  </section>
+
+  <section>
+    <h2>Items</h2>
+    <table id="items-table">
+      <thead>
+        <tr><th>UPC</th><th>Name</th><th>Quantity</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr data-upc="{{ item.upc }}">
+          <td>{{ item.upc }}</td>
+          <td>{{ item.name }}</td>
+          <td class="qty">{{ item.quantity }}</td>
+          <td><button class="delete-btn" data-upc="{{ item.upc }}">Delete</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
