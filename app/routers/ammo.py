@@ -124,7 +124,14 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     transactions = list(db.scalars(select(InventoryTransaction).where(InventoryTransaction.ammo_product_id == product_id).order_by(InventoryTransaction.created_at.desc(), InventoryTransaction.id.desc())))
-    return {**AmmoProductOut.model_validate(product).model_dump(), "transactions": [InventoryTransactionOut.model_validate(item).model_dump() for item in transactions]}
+    fields = list(db.scalars(select(FieldDefinition).where(FieldDefinition.system_field.is_(False))))
+    values = {value.field_definition_id: value for value in db.scalars(select(CustomFieldValue).where(CustomFieldValue.ammo_product_id == product_id))}
+    custom_fields = {}
+    for field in fields:
+        value = values.get(field.id)
+        if value:
+            custom_fields[field.field_key] = value.text_value if field.value_type == FieldValueType.TEXT else value.number_value if field.value_type == FieldValueType.NUMBER else value.boolean_value
+    return {**AmmoProductOut.model_validate(product).model_dump(), "transactions": [InventoryTransactionOut.model_validate(item).model_dump() for item in transactions], "custom_fields": custom_fields}
 
 
 @router.patch("/{product_id}", response_model=AmmoProductOut)

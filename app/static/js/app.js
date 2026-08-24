@@ -25,6 +25,7 @@ const editProductModal = document.getElementById("edit-product-modal");
 const editProductForm = document.getElementById("edit-product-form");
 const editProductError = document.getElementById("edit-product-error");
 const editCartridge = document.getElementById("edit-cartridge");
+const editCustomFields = document.getElementById("edit-custom-fields");
 const adminFieldsBody = document.querySelector("#admin-fields-table tbody");
 const adminFieldError = document.getElementById("admin-field-error");
 const locationsTableBody = document.querySelector("#locations-table tbody");
@@ -247,16 +248,35 @@ async function showProductDetail(productId) {
   const product = await response.json();
   const fieldsResponse = await fetch("/api/admin/fields");
   if (fieldsResponse.ok) {
-    const cartridgeField = (await fieldsResponse.json()).find((field) => field.field_key === "cartridge");
+    const fields = await fieldsResponse.json();
+    const cartridgeField = fields.find((field) => field.field_key === "cartridge");
     const options = cartridgeField?.options?.filter((option) => option.enabled) || [];
     editCartridge.replaceChildren(new Option("Select…", ""), ...options.map((option) => new Option(option.label, option.stable_key)));
     if (![...editCartridge.options].some((option) => option.value === product.cartridge)) editCartridge.add(new Option(product.cartridge, product.cartridge));
+    renderEditCustomFields(fields.filter((field) => !field.system_field && field.enabled), product.custom_fields || {});
   }
   detailProductId = product.id;
   const identifiers = product.identifiers.map((item) => `<li>${item.upc} · ${item.rounds_per_package} rounds${item.active ? "" : " (inactive)"}</li>`).join("");
   const history = product.transactions.map((item) => `<tr><td>${new Date(item.created_at).toLocaleString()}</td><td>${item.transaction_type}</td><td>${item.box_delta}</td><td>${item.round_delta}</td><td>${item.new_box_balance}</td></tr>`).join("") || "<tr><td colspan=\"5\">No transactions</td></tr>";
   productDetailContent.innerHTML = `<dl class="product-summary"><dt>Manufacturer</dt><dd>${product.manufacturer}</dd><dt>Product line</dt><dd>${product.product_line || ""}</dd><dt>Cartridge</dt><dd>${product.cartridge}</dd><dt>Boxes</dt><dd>${product.box_quantity}</dd><dt>Rounds</dt><dd>${product.round_quantity}</dd></dl><h3>Package identifiers</h3><ul>${identifiers}</ul><h3>Transactions</h3><table><thead><tr><th>When</th><th>Type</th><th>Boxes</th><th>Rounds</th><th>Balance</th></tr></thead><tbody>${history}</tbody></table>`;
   productDetailModal.showModal();
+}
+
+function renderEditCustomFields(fields, values) {
+  editCustomFields.replaceChildren(...fields.map((field) => {
+    const label = document.createElement("label"); label.className = "field";
+    const title = document.createElement("span"); title.textContent = `${field.display_name}${field.unit ? ` (${field.unit})` : ""}${field.required ? " *" : ""}`;
+    let input;
+    if (field.field_type === "dropdown") {
+      input = document.createElement("select"); input.append(new Option("Select…", ""), ...field.options.filter((option) => option.enabled || option.stable_key === values[field.field_key]).map((option) => new Option(option.label, option.stable_key)));
+    } else if (field.field_type === "checkbox") {
+      input = document.createElement("input"); input.type = "checkbox"; input.checked = values[field.field_key] === true;
+    } else {
+      input = document.createElement("input"); input.type = field.value_type === "number" ? "number" : "text"; if (input.type === "number") input.step = "any";
+    }
+    input.name = `custom:${field.field_key}`; input.required = field.required; if (field.field_type !== "checkbox") input.value = values[field.field_key] ?? "";
+    label.append(title, input); return label;
+  }));
 }
 
 async function openEditProduct() {
@@ -276,6 +296,12 @@ editProductForm.addEventListener("submit", async (event) => {
   if (!detailProductId) return;
   const form = new FormData(editProductForm);
   const payload = Object.fromEntries(form.entries());
+  const customFields = {};
+  editCustomFields.querySelectorAll("[name^='custom:']").forEach((input) => {
+    const key = input.name.slice(7);
+    customFields[key] = input.type === "checkbox" ? input.checked : input.value || null;
+    delete payload[input.name];
+  });
   ["product_line", "manufacturer_sku", "bullet_type", "description", "notes", "low_stock_threshold_unit"].forEach((field) => {
     if (payload[field] === "") payload[field] = null;
   });
@@ -283,6 +309,10 @@ editProductForm.addEventListener("submit", async (event) => {
   payload.low_stock_threshold = payload.low_stock_threshold === "" ? null : Number(payload.low_stock_threshold);
   const response = await fetch(`/api/ammo/${detailProductId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!response.ok) { editProductError.textContent = await responseError(response, "Product could not be updated."); return; }
+  if (Object.keys(customFields).length) {
+    const customResponse = await fetch(`/api/ammo/${detailProductId}/custom-fields`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values: customFields }) });
+    if (!customResponse.ok) { editProductError.textContent = await responseError(customResponse, "Custom fields could not be updated."); return; }
+  }
   editProductModal.close();
   await loadInventory();
   await showProductDetail(detailProductId);

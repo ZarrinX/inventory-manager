@@ -93,3 +93,4 @@ class InventoryPage(BaseModel):
 
 class AmmoProductDetail(AmmoProductOut):
     transactions: list["InventoryTransactionOut"]
+    custom_fields: dict[str, Any] = Field(default_factory=dict)
