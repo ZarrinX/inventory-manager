@@ -11,7 +11,6 @@ class DropdownOptionOut(BaseModel):
     stable_key: str
     label: str
     sort_order: int
-    unit: str | None = None
     enabled: bool
 
 
@@ -26,6 +25,7 @@ class FieldDefinitionOut(BaseModel):
     enabled: bool
     searchable: bool
     sort_order: int
+    unit: str | None = None
     system_field: bool
     configuration: dict | None = None
     options: list[DropdownOptionOut] = []

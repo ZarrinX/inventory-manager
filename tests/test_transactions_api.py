@@ -64,9 +64,10 @@ def test_transaction_api_creates_inventory_and_is_idempotent(db):
 
             created_field = client.post("/api/admin/fields", json={
                 "field_key": "purpose", "display_name": "Purpose", "field_type": "dropdown",
-                "value_type": "text", "searchable": True,
+                "value_type": "text", "unit": "category", "searchable": True,
             })
             assert created_field.status_code == 201
+            assert created_field.json()["unit"] == "category"
             field_id = created_field.json()["id"]
             assert client.post(f"/api/admin/fields/{field_id}/options", json={"stable_key": "range", "label": "Range"}).status_code == 201
             assert client.patch(f"/api/admin/fields/{field_id}", json={"display_name": "Use"}).status_code == 200
