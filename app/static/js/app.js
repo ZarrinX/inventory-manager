@@ -4,9 +4,10 @@ const scanUpc = document.getElementById("scan-upc");
 const scanKnown = document.getElementById("scan-known");
 const scanUnknown = document.getElementById("scan-unknown");
 const scanName = document.getElementById("scan-name");
-const scanQty = document.getElementById("scan-qty");
-const newItemForm = document.getElementById("new-item-form");
-const itemsTableBody = document.querySelector("#items-table tbody");
+const scanBoxQty = document.getElementById("scan-box-qty");
+const scanRoundQty = document.getElementById("scan-round-qty");
+const newProductForm = document.getElementById("new-product-form");
+const ammoTableBody = document.querySelector("#ammo-table tbody");
 
 let currentUpc = null;
 
@@ -34,81 +35,67 @@ function showScan(data) {
   scanUpc.textContent = data.upc;
   scanPanel.hidden = false;
 
-  if (data.item) {
+  if (data.product) {
     scanKnown.hidden = false;
     scanUnknown.hidden = true;
-    scanName.textContent = data.item.name;
-    scanQty.textContent = data.item.quantity;
-    updateRow(data.item);
+    scanName.textContent = [data.product.manufacturer, data.product.product_line, data.product.cartridge]
+      .filter(Boolean)
+      .join(" — ");
+    scanBoxQty.textContent = data.product.box_quantity;
+    scanRoundQty.textContent = data.product.round_quantity;
+    updateRow(data.product);
   } else {
     scanKnown.hidden = true;
     scanUnknown.hidden = false;
   }
 }
 
-function updateRow(item) {
-  let row = itemsTableBody.querySelector(`tr[data-upc="${item.upc}"]`);
+function updateRow(product) {
+  let row = ammoTableBody.querySelector(`tr[data-product-id="${product.id}"]`);
   if (!row) {
     row = document.createElement("tr");
-    row.dataset.upc = item.upc;
-    row.innerHTML = `<td>${item.upc}</td><td class="name"></td><td class="qty"></td>
-      <td><button class="delete-btn" data-upc="${item.upc}">Delete</button></td>`;
-    itemsTableBody.appendChild(row);
+    row.dataset.productId = product.id;
+    row.innerHTML = `<td class="manufacturer"></td><td class="product-line"></td><td class="cartridge"></td>
+      <td class="box-qty"></td><td class="round-qty"></td>`;
+    ammoTableBody.appendChild(row);
   }
-  row.querySelector(".name")?.replaceChildren(document.createTextNode(item.name));
-  row.querySelector(".qty").textContent = item.quantity;
+  row.querySelector(".manufacturer").textContent = product.manufacturer;
+  row.querySelector(".product-line").textContent = product.product_line || "";
+  row.querySelector(".cartridge").textContent = product.cartridge;
+  row.querySelector(".box-qty").textContent = product.box_quantity;
+  row.querySelector(".round-qty").textContent = product.round_quantity;
 }
 
-async function adjust(upc, delta) {
-  const res = await fetch(`/api/items/${encodeURIComponent(upc)}/adjust`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ delta }),
-  });
-  if (res.ok) {
-    const item = await res.json();
-    scanQty.textContent = item.quantity;
-    updateRow(item);
-  }
-}
-
-document.querySelectorAll(".adjust-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    if (currentUpc) adjust(currentUpc, Number(btn.dataset.delta));
-  });
-});
-
-itemsTableBody.addEventListener("click", async (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLElement) || !target.classList.contains("delete-btn")) return;
-  const upc = target.dataset.upc;
-  const res = await fetch(`/api/items/${encodeURIComponent(upc)}`, { method: "DELETE" });
-  if (res.ok) {
-    target.closest("tr")?.remove();
-  }
-});
-
-newItemForm.addEventListener("submit", async (event) => {
+newProductForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!currentUpc) return;
-  const formData = new FormData(newItemForm);
-  const res = await fetch("/api/items", {
+  const formData = new FormData(newProductForm);
+  const payload = {
+    upc: currentUpc,
+    manufacturer: formData.get("manufacturer"),
+    product_line: formData.get("product_line") || null,
+    cartridge: formData.get("cartridge"),
+    bullet_weight_gr: formData.get("bullet_weight_gr") || null,
+    bullet_type: formData.get("bullet_type") || null,
+    rounds_per_package: Number(formData.get("rounds_per_package")),
+    initial_box_quantity: Number(formData.get("initial_box_quantity")),
+  };
+  const res = await fetch("/api/ammo", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      upc: currentUpc,
-      name: formData.get("name"),
-      quantity: Number(formData.get("quantity")),
-    }),
+    body: JSON.stringify(payload),
   });
   if (res.ok) {
-    const item = await res.json();
-    updateRow(item);
+    const product = await res.json();
+    updateRow(product);
     scanKnown.hidden = false;
     scanUnknown.hidden = true;
-    scanName.textContent = item.name;
-    scanQty.textContent = item.quantity;
-    newItemForm.reset();
+    scanName.textContent = [product.manufacturer, product.product_line, product.cartridge]
+      .filter(Boolean)
+      .join(" — ");
+    scanBoxQty.textContent = product.box_quantity;
+    scanRoundQty.textContent = product.round_quantity;
+    newProductForm.reset();
   }
 });
 

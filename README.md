@@ -15,13 +15,17 @@ mode) and manages inventory in Postgres, with a live web dashboard.
 4. The app needs read access to that device. Either run it as root, add your
    user to the `input` group (`sudo usermod -aG input $USER`, then re-login),
    or add a udev rule granting group `input` access to the device.
-5. Install dependencies and run:
+5. Install dependencies, apply migrations, and run:
    ```
    python -m venv .venv && source .venv/bin/activate
    pip install -r requirements.txt
+   alembic upgrade head
    uvicorn app.main:app --host 0.0.0.0 --port 8000
    ```
-6. Open `http://<host>:8000/` — scan a barcode to look up or add an item.
+6. Open `http://<host>:8000/` — scan a barcode to look up or add ammunition.
+
+See [spec.md](spec.md) for the full product spec and [todo.md](todo.md) for
+the implementation checklist/progress.
 
 Note: the scanner must be physically attached to the machine running the app
 (e.g. the Raspberry Pi), since it reads the HID device directly.
@@ -38,10 +42,11 @@ deployment to the Pi, matching the pattern used by `muthur-ui`.
 | Checkout | Pulls latest code from SCM |
 | Load Secrets | Symlinks `/opt/inventory-manager/.env` → `.env` so credentials are available at build time |
 | Build & Deploy | Runs `docker compose up --build -d --remove-orphans` (builds the app image and starts it alongside Postgres) |
+| Migrate DB | Runs `alembic upgrade head` inside the `app` container |
 | Cleanup | Prunes dangling Docker images |
 
-Table creation is handled automatically by the app on startup, so there's no
-separate migrate/seed stage.
+Schema changes are managed by Alembic migrations under `alembic/versions/` —
+there is no `Base.metadata.create_all()` fallback in production.
 
 The pipeline requires a `.env` file at `/opt/inventory-manager/.env` on the
 Jenkins agent (the Pi) containing `POSTGRES_DB`, `POSTGRES_USER`,

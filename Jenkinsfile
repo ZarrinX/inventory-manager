@@ -25,6 +25,12 @@ pipeline {
             }
         }
 
+        stage('Migrate DB') {
+            steps {
+                sh 'docker compose -f docker-compose.yml exec -T app alembic upgrade head'
+            }
+        }
+
         stage('Cleanup') {
             steps {
                 sh 'docker image prune -f'

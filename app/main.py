@@ -6,13 +6,13 @@ from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.broadcast import manager
 from app.config import settings
-from app.db import Base, SessionLocal, engine, get_db
-from app.models import Item, ScanEvent
-from app.routers import items
+from app.db import SessionLocal, get_db
+from app.models import AmmoPackageIdentifier, AmmoProduct, ScanEvent
+from app.routers import ammo
 from app.scanner import ScannerReader
 
 logger = logging.getLogger(__name__)
@@ -23,26 +23,40 @@ _scanner: ScannerReader | None = None
 
 
 def _handle_scan(payload: str, loop: asyncio.AbstractEventLoop) -> None:
-    """Runs on the scanner's background thread: persists the scan and
-    schedules a broadcast on the app's event loop."""
+    """Runs on the scanner's background thread: records the scan event and
+    schedules a broadcast on the app's event loop. Never mutates inventory
+    itself (spec §3.1) — that only happens via a confirmed transaction."""
     db: Session = SessionLocal()
     try:
-        item = db.scalar(select(Item).where(Item.upc == payload))
-        event = ScanEvent(upc=payload, item_id=item.id if item else None)
+        identifier = db.scalar(
+            select(AmmoPackageIdentifier).where(
+                AmmoPackageIdentifier.upc == payload, AmmoPackageIdentifier.active.is_(True)
+            )
+        )
+        product = None
+        if identifier:
+            product = db.scalar(
+                select(AmmoProduct)
+                .options(selectinload(AmmoProduct.identifiers))
+                .where(AmmoProduct.id == identifier.ammo_product_id)
+            )
+
+        event = ScanEvent(payload=payload, ammo_product_id=product.id if product else None)
         db.add(event)
         db.commit()
 
         result = {
             "upc": payload,
             "scanned_at": event.scanned_at.isoformat(),
-            "item": {
-                "id": item.id,
-                "upc": item.upc,
-                "name": item.name,
-                "description": item.description,
-                "quantity": item.quantity,
+            "product": {
+                "id": product.id,
+                "manufacturer": product.manufacturer,
+                "product_line": product.product_line,
+                "cartridge": product.cartridge,
+                "box_quantity": product.box_quantity,
+                "round_quantity": product.round_quantity,
             }
-            if item
+            if product
             else None,
         }
     finally:
@@ -54,7 +68,7 @@ def _handle_scan(payload: str, loop: asyncio.AbstractEventLoop) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _scanner
-    Base.metadata.create_all(bind=engine)
+    # Schema is managed by Alembic migrations (see alembic/), not created here.
 
     loop = asyncio.get_event_loop()
     try:
@@ -78,14 +92,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Inventory Manager", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
-app.include_router(items.router)
+app.include_router(ammo.router)
 
 
 @app.get("/")
 def index(request: Request, db: Session = Depends(get_db)):
-    all_items = list(db.scalars(select(Item).order_by(Item.name)))
+    products = list(
+        db.scalars(
+            select(AmmoProduct)
+            .options(selectinload(AmmoProduct.identifiers))
+            .where(AmmoProduct.deleted_at.is_(None))
+            .order_by(AmmoProduct.manufacturer, AmmoProduct.cartridge)
+        )
+    )
     return templates.TemplateResponse(
-        "index.html", {"request": request, "items": all_items}
+        "index.html", {"request": request, "products": products}
     )
 
 

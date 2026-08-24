@@ -11,13 +11,19 @@ References like `(§24.5)` point back to the relevant spec section.
 
 ## Phase 0 — Migrations Foundation
 
-- [ ] Add Alembic to the project (`alembic/`, `alembic.ini`)
-- [ ] Generate an initial migration capturing the current `Item`/`ScanEvent`
-      schema
-- [ ] Remove `Base.metadata.create_all()` from app startup; migrations become
+> Deviation from the original plan below: since the PoC never held real
+> production data (only manual smoke-test rows), the initial migration goes
+> straight to the Phase 1 schema instead of first capturing the old
+> `Item`/`ScanEvent` tables and migrating away from them in a second step.
+
+- [x] Add Alembic to the project (`alembic/`, `alembic.ini`)
+- [x] Generate an initial migration capturing the current `Item`/`ScanEvent`
+      schema — combined with the Phase 1 schema instead (see note above);
+      `alembic/versions/14736a9fea83_initial_schema.py`
+- [x] Remove `Base.metadata.create_all()` from app startup; migrations become
       the schema-upgrade mechanism (§15)
-- [ ] Document `alembic upgrade head` in README/AGENTS.md dev + deploy steps
-- [ ] Add a Jenkinsfile stage to run `alembic upgrade head` on deploy (mirrors
+- [x] Document `alembic upgrade head` in README/AGENTS.md dev + deploy steps
+- [x] Add a Jenkinsfile stage to run `alembic upgrade head` on deploy (mirrors
       muthur-ui's migrate stage)
 
 ## Phase 1 — Data Model Refactor
@@ -25,41 +31,46 @@ References like `(§24.5)` point back to the relevant spec section.
 Replace the current single `Item` table with the product/identifier split
 required by §24.1.
 
-- [ ] `AmmoProduct` model (manufacturer, product_line, manufacturer_sku,
+- [x] `AmmoProduct` model (manufacturer, product_line, manufacturer_sku,
       cartridge, bullet_weight_gr, bullet_type, description, notes,
       storage_location, low_stock_threshold, low_stock_threshold_unit,
       created_at, updated_at, deleted_at)
-- [ ] `AmmoPackageIdentifier` model (ammo_product_id, upc, rounds_per_package,
+- [x] `AmmoPackageIdentifier` model (ammo_product_id, upc, rounds_per_package,
       package_description, active, created_at, updated_at)
-- [ ] `InventoryTransaction` model (ammo_product_id, scan_event_id,
+- [x] `InventoryTransaction` model (ammo_product_id, scan_event_id,
       transaction_type, box_delta, round_delta, previous/new box+round
       balances, location_id, source_type, source_id, client_request_id,
       reverses_transaction_id, notes, created_at) (§6.2, §24.9, §24.10)
-- [ ] Update `ScanEvent` model: payload, barcode_format, ammo_product_id
+- [x] Update `ScanEvent` model: payload, barcode_format, ammo_product_id
       (nullable), scanner_id (nullable), status (`RECEIVED`/`RESOLVED`/
       `COMPLETED`/`CANCELED`/`FAILED`), scanned_at (§24.4)
-- [ ] `FieldDefinition` model (field_key, display_name, field_type,
+- [x] `FieldDefinition` model (field_key, display_name, field_type,
       value_type, required, enabled, searchable, sort_order, system_field,
       configuration, created_at, updated_at)
-- [ ] `CustomFieldValue` model (ammo_product_id, field_definition_id,
+- [x] `CustomFieldValue` model (ammo_product_id, field_definition_id,
       text_value, number_value, boolean_value) — only one value column
       populated per row
-- [ ] `DropdownOption` model (field_definition_id, stable_key, label,
+- [x] `DropdownOption` model (field_definition_id, stable_key, label,
       sort_order, enabled)
-- [ ] `Location` model (name, parent_id, active) (§24.11)
-- [ ] `InventoryViewPreference` model (name, is_default, visible_columns,
+- [x] `Location` model (name, parent_id, active) (§24.11)
+- [x] `InventoryViewPreference` model (name, is_default, visible_columns,
       column_order, sort_field, sort_direction, page_size, created_at,
       updated_at) (§8, §24.20)
-- [ ] `AuditEvent` model (entity_type, entity_id, action, field_key,
+- [x] `AuditEvent` model (entity_type, entity_id, action, field_key,
       old_value, new_value, source_type, source_id, created_at) (§24.24)
-- [ ] Migration: seed default `FieldDefinition` rows for the system fields
+- [x] Migration: seed default `FieldDefinition` rows for the system fields
       listed in §5.2
-- [ ] Migration/backfill plan for any existing local `Item`/`ScanEvent` data
+- [x] Migration/backfill plan for any existing local `Item`/`ScanEvent` data
       into the new schema (or explicitly accept a clean slate if no
-      production data exists yet)
-- [ ] Numeric custom-field storage uses `Numeric`/`Decimal`, not float (§10.2)
+      production data exists yet) — clean slate accepted, see Phase 0 note
+- [x] Numeric custom-field storage uses `Numeric`/`Decimal`, not float (§10.2)
 
 ## Phase 2 — Service Layer
+
+> Note: `app/routers/ammo.py` currently contains minimal, inlined versions of
+> product-creation and transaction-creation logic to keep Phase 1 testable
+> end-to-end. It does not yet have idempotency, reversal, or the dedicated
+> service/repository split below — that's this phase's job.
 
 Introduce the service layer so routes and the scanner handler share one set
 of business rules (§14, §22.5).

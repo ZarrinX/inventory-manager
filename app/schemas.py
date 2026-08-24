@@ -1,38 +1,80 @@
 import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
-
-class ItemBase(BaseModel):
-    upc: str
-    name: str
-    description: str | None = None
-    quantity: int = 0
+from app.models import TransactionType
 
 
-class ItemCreate(ItemBase):
-    pass
-
-
-class ItemUpdate(BaseModel):
-    name: str | None = None
-    description: str | None = None
-    quantity: int | None = None
-
-
-class ItemAdjust(BaseModel):
-    delta: int
-
-
-class ItemOut(ItemBase):
+class AmmoPackageIdentifierOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    upc: str
+    rounds_per_package: int
+    package_description: str | None = None
+    active: bool
+
+
+class AmmoProductOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    manufacturer: str
+    product_line: str | None = None
+    manufacturer_sku: str | None = None
+    cartridge: str
+    bullet_weight_gr: Decimal | None = None
+    bullet_type: str | None = None
+    description: str | None = None
+    notes: str | None = None
+    box_quantity: int
+    round_quantity: int
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    identifiers: list[AmmoPackageIdentifierOut] = []
+
+
+class AmmoProductCreate(BaseModel):
+    """Minimal unknown-UPC creation payload (spec §5.2). Field-definition
+    driven custom fields and full validation land in a later phase."""
+
+    upc: str
+    manufacturer: str
+    product_line: str | None = None
+    manufacturer_sku: str | None = None
+    cartridge: str
+    bullet_weight_gr: Decimal | None = None
+    bullet_type: str | None = None
+    rounds_per_package: int
+    description: str | None = None
+    notes: str | None = None
+    initial_box_quantity: int = 0
+
+
+class InventoryTransactionCreate(BaseModel):
+    transaction_type: TransactionType
+    box_delta: int
+    notes: str | None = None
+
+
+class InventoryTransactionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ammo_product_id: int
+    transaction_type: TransactionType
+    box_delta: int
+    round_delta: int
+    previous_box_balance: int
+    new_box_balance: int
+    previous_round_balance: int
+    new_round_balance: int
+    notes: str | None = None
+    created_at: datetime.datetime
 
 
 class ScanResult(BaseModel):
     upc: str
     scanned_at: datetime.datetime
-    item: ItemOut | None = None
+    product: AmmoProductOut | None = None

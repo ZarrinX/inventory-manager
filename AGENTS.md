@@ -1,21 +1,32 @@
 # AGENTS.md — inventory-manager
 
-Inventory control system built around a UPC/QR barcode scanner. Reads scans
-directly from the scanner's USB HID device and manages stock levels in
-Postgres, with a live web dashboard.
+Ammunition inventory control system built around a UPC/QR barcode scanner.
+See [spec.md](spec.md) for the full product/technical spec and [todo.md](todo.md)
+for the phased implementation checklist — check items off there as work lands.
 
 ## Architecture
 
-- **Stack**: Python 3.12, FastAPI, SQLAlchemy, Postgres, Jinja2 + vanilla JS
-  (no frontend framework/build step).
+- **Stack**: Python 3.12, FastAPI, SQLAlchemy, Postgres + Alembic migrations,
+  Jinja2 + vanilla JS (no frontend framework/build step).
+- **Domain model** (`app/models/`): a barcode/UPC (`AmmoPackageIdentifier`)
+  resolves to an underlying `AmmoProduct`; multiple UPCs/package sizes can
+  share one product (spec §24.1). Inventory only changes via immutable
+  `InventoryTransaction` rows — a `ScanEvent` never mutates stock by itself
+  (spec §3.1). `AmmoProduct.box_quantity`/`round_quantity` are denormalized
+  running balances kept in sync whenever a transaction is created. Admin
+  field configuration (`FieldDefinition`, `CustomFieldValue`,
+  `DropdownOption`), `Location`, `InventoryViewPreference`, and `AuditEvent`
+  round out the schema — see spec §11/§24 for the rationale behind each.
 - **Scanner input**: the scanner ("Symcode Pro 1D 2D QR Wireless Barcode
   Scanner") acts as a USB HID keyboard. Instead of relying on window focus,
   `app/scanner.py` reads `/dev/input/by-id/usb-Scanner_Barcode_0215-event-kbd`
   directly via `evdev`, decodes keystrokes into full scan strings, and calls
   back into the app.
-- **Data flow**: scan → looked up/logged in Postgres (`Item`, `ScanEvent` in
-  `app/models.py`) → broadcast to connected browsers over `/ws/scans`
-  (`app/broadcast.py`) → dashboard updates live (`app/static/js/app.js`).
+- **Data flow**: scan → UPC resolved against `AmmoPackageIdentifier` →
+  `ScanEvent` recorded → broadcast to connected browsers over `/ws/scans`
+  (`app/broadcast.py`) → dashboard updates live (`app/static/js/app.js`). The
+  full unknown/known-UPC modal workflow, scan queue, and debounce from the
+  spec are not yet implemented (see todo.md Phase 3/6).
 - **Hardware**: the scanner is physically attached to the Raspberry Pi
   (`zrice@10.64.32.100`, hostname `Pi5`), so the app must run there — it
   won't see scans if run elsewhere.
@@ -24,13 +35,14 @@ Postgres, with a live web dashboard.
 
 | Path | Purpose |
 |---|---|
-| `app/main.py` | FastAPI app, lifespan startup (creates DB tables, starts scanner thread), routes |
+| `app/main.py` | FastAPI app, lifespan startup (starts scanner thread), routes |
 | `app/scanner.py` | Background thread reading the HID device via evdev |
-| `app/models.py` | SQLAlchemy models: `Item`, `ScanEvent` |
-| `app/routers/items.py` | REST API for item CRUD + quantity adjustment |
+| `app/models/` | SQLAlchemy models split by concern (ammo, transactions, scan, fields, location, preferences, audit) |
+| `app/routers/ammo.py` | Minimal REST API: list/create products, lookup by UPC, create transactions |
 | `app/broadcast.py` | WebSocket connection manager for live scan push |
+| `alembic/` | Migrations — schema is Alembic-managed, no `create_all()` in production |
 | `docker-compose.yml` | `app` + `postgres` services for local dev and deployment |
-| `Jenkinsfile` | CI/CD pipeline (mirrors `muthur-ui`'s pattern) |
+| `Jenkinsfile` | CI/CD pipeline (mirrors `muthur-ui`'s pattern), includes an `alembic upgrade head` stage |
 
 ## Local development
 
@@ -39,11 +51,29 @@ docker compose up -d postgres
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
 The scanner device won't exist on a dev machine — `ScannerReader` catches
 `OSError` and retries every 5s, so the rest of the app still works locally.
+
+### Generating a new migration
+
+Postgres isn't published to the host (see gotchas below), so run Alembic
+inside a one-off container on the compose network, bind-mounting `alembic/`
+so the generated file lands on the host instead of being lost with the
+container:
+
+```
+docker compose up -d postgres
+docker compose build app
+docker compose run --rm --no-deps --entrypoint "" -v "$(pwd)/alembic:/app/alembic" app \
+  alembic revision --autogenerate -m "description"
+# fix ownership without needing host sudo — chown from inside a root container instead:
+docker compose run --rm --no-deps --entrypoint "" -v "$(pwd)/alembic:/app/alembic" app \
+  chown -R $(id -u):$(id -g) /app/alembic/versions
+```
 
 ## Deployment (Jenkins CI/CD on the Pi)
 
@@ -52,11 +82,12 @@ The scanner device won't exist on a dev machine — `ScannerReader` catches
 - Job: `inventory-manager`, polls `main` every 2 minutes, credential
   `github-pat-auth`.
 - Pipeline: checkout → symlink `/opt/inventory-manager/.env` → `.env` →
-  `docker compose up --build -d --remove-orphans` → prune images.
+  `docker compose up --build -d --remove-orphans` → `alembic upgrade head` →
+  prune images.
 - `/opt/inventory-manager/.env` on the Pi holds `POSTGRES_DB`,
   `POSTGRES_USER`, `POSTGRES_PASSWORD`, `SCANNER_DEVICE_PATH`.
-- Table creation is automatic on app startup (`Base.metadata.create_all`) —
-  no separate migrate/seed stage needed.
+- Schema changes are Alembic-managed (`alembic/versions/`) — there is no
+  `Base.metadata.create_all()` fallback anymore.
 
 ### Gotchas learned the hard way
 
@@ -75,6 +106,16 @@ The scanner device won't exist on a dev machine — `ScannerReader` catches
   specific repos (GitHub App/fine-grained PAT). A 403 "Write access to
   repository not granted" on a plain `git fetch` means the credential needs
   the new repo added to its access list, not a code fix.
+- **Alembic + SQLAlchemy Enum columns**: `sa.Enum(SomePyEnum)` stores the
+  enum member's **name** (e.g. `"TEXT"`), not its `.value` (e.g. `"text"|"`),
+  unless `values_callable` is set. Data migrations that insert enum values
+  must use the member name to match what autogenerate put in the DDL.
+- **Docker bind mounts + root-owned files**: running one-off `docker compose
+  run` commands (e.g. `alembic revision --autogenerate`) with a bind mount
+  writes files as root on the host, since the container runs as root. Fix
+  ownership from *inside* another root container
+  (`chown -R $(id -u):$(id -g) ...`) instead of host `sudo`, to avoid
+  interactive password prompts.
 
 ## Conventions
 
