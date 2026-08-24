@@ -19,15 +19,22 @@ pipeline {
             }
         }
 
-        stage('Build & Deploy') {
+        stage('Build Image') {
             steps {
-                sh 'docker compose -f docker-compose.yml up --build -d --remove-orphans'
+                sh 'docker compose -f docker-compose.yml build app'
             }
         }
 
         stage('Migrate DB') {
             steps {
-                sh 'docker compose -f docker-compose.yml exec -T app alembic upgrade head'
+                sh 'docker compose -f docker-compose.yml up -d postgres'
+                sh 'docker compose -f docker-compose.yml run --rm --no-deps --entrypoint "" app alembic upgrade head'
+            }
+        }
+
+        stage('Deploy App') {
+            steps {
+                sh 'docker compose -f docker-compose.yml up -d app --remove-orphans'
             }
         }
 

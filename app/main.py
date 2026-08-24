@@ -8,11 +8,11 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.broadcast import manager
+from app.broadcast import manager, scan_payload
 from app.config import settings
 from app.db import SessionLocal, get_db
-from app.models import AmmoProduct
-from app.routers import ammo
+from app.models import AmmoProduct, AuditEvent, FieldDefinition, Location
+from app.routers import ammo, audit, data_management, fields, locations, preferences, scans, transactions
 from app.scanner import ScannerReader
 from app.services import scan_service
 
@@ -29,26 +29,16 @@ def _handle_scan(payload: str, loop: asyncio.AbstractEventLoop) -> None:
     itself (spec §3.1) — that only happens via a confirmed transaction."""
     db: Session = SessionLocal()
     try:
-        event, product = scan_service.record_scan(db, payload)
-
-        result = {
-            "upc": payload,
-            "scanned_at": event.scanned_at.isoformat(),
-            "product": {
-                "id": product.id,
-                "manufacturer": product.manufacturer,
-                "product_line": product.product_line,
-                "cartridge": product.cartridge,
-                "box_quantity": product.box_quantity,
-                "round_quantity": product.round_quantity,
-            }
-            if product
-            else None,
-        }
+        result = scan_service.record_scan(db, payload)
+    except Exception:
+        db.rollback()
+        logger.exception("Could not persist scanner payload; scan was not broadcast")
+        return
     finally:
         db.close()
 
-    asyncio.run_coroutine_threadsafe(manager.broadcast(result), loop)
+    if result.event is not None:
+        asyncio.run_coroutine_threadsafe(manager.broadcast(scan_payload(result)), loop)
 
 
 @asynccontextmanager
@@ -79,6 +69,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Inventory Manager", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 app.include_router(ammo.router)
+app.include_router(scans.router)
+app.include_router(transactions.router)
+app.include_router(audit.router)
+app.include_router(preferences.router)
+app.include_router(fields.router)
+app.include_router(locations.router)
+app.include_router(data_management.router)
 
 
 @app.get("/")
@@ -91,8 +88,42 @@ def index(request: Request, db: Session = Depends(get_db)):
             .order_by(AmmoProduct.manufacturer, AmmoProduct.cartridge)
         )
     )
+    form_fields = list(
+        db.scalars(
+            select(FieldDefinition)
+            .where(FieldDefinition.enabled.is_(True))
+            .order_by(FieldDefinition.sort_order)
+        )
+    )
+    locations_for_form = list(db.scalars(select(Location).where(Location.active.is_(True)).order_by(Location.name)))
     return templates.TemplateResponse(
-        "index.html", {"request": request, "products": products}
+        "index.html", {"request": request, "products": products, "form_fields": form_fields, "locations": locations_for_form}
+    )
+
+
+@app.get("/api/scanners")
+def scanner_status():
+    return {
+        "connected": _scanner.connected if _scanner else False,
+        "last_scan_at": _scanner.last_scan_at.isoformat() if _scanner and _scanner.last_scan_at else None,
+    }
+
+
+@app.get("/audit")
+def audit_history(
+    request: Request,
+    entity_type: str | None = None,
+    entity_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    query = select(AuditEvent).order_by(AuditEvent.created_at.desc(), AuditEvent.id.desc()).limit(250)
+    if entity_type:
+        query = query.where(AuditEvent.entity_type == entity_type)
+    if entity_id is not None:
+        query = query.where(AuditEvent.entity_id == entity_id)
+    return templates.TemplateResponse(
+        "audit.html",
+        {"request": request, "events": list(db.scalars(query)), "entity_type": entity_type, "entity_id": entity_id},
     )
 
 
@@ -106,4 +137,3 @@ async def scans_websocket(websocket: WebSocket):
             await websocket.receive_text()
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
-

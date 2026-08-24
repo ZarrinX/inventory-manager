@@ -24,9 +24,10 @@ for the phased implementation checklist — check items off there as work lands.
   back into the app.
 - **Data flow**: scan → UPC resolved against `AmmoPackageIdentifier` →
   `ScanEvent` recorded → broadcast to connected browsers over `/ws/scans`
-  (`app/broadcast.py`) → dashboard updates live (`app/static/js/app.js`). The
-  full unknown/known-UPC modal workflow, scan queue, and debounce from the
-  spec are not yet implemented (see todo.md Phase 3/6).
+  (`app/broadcast.py`) → dashboard updates live (`app/static/js/app.js`). One
+  scan is active at a time; the next five are queued FIFO, and duplicates from
+  the same scanner/UPC within 500 ms are suppressed. The full unknown/known
+  UPC modal workflow remains Phase 6 work.
 - **Hardware**: the scanner is physically attached to the Raspberry Pi
   (`zrice@10.64.32.100`, hostname `Pi5`), so the app must run there — it
   won't see scans if run elsewhere.
@@ -82,9 +83,10 @@ docker compose run --rm --no-deps --entrypoint "" -v "$(pwd)/alembic:/app/alembi
   used by `muthur-ui`. Jenkins MCP tools are available for build status/logs.
 - Job: `inventory-manager`, polls `main` every 2 minutes, credential
   `github-pat-auth`.
-- Pipeline: checkout → symlink `/opt/inventory-manager/.env` → `.env` →
-  `docker compose up --build -d --remove-orphans` → `alembic upgrade head` →
-  prune images.
+- Pipeline: checkout → symlink `/opt/inventory-manager/.env` → `.env` → build
+  app image → ensure Postgres is running → run `alembic upgrade head` from the
+  new image → deploy the app → prune images. This keeps a newly deployed app
+  from starting against an outdated schema.
 - `/opt/inventory-manager/.env` on the Pi holds `POSTGRES_DB`,
   `POSTGRES_USER`, `POSTGRES_PASSWORD`, `SCANNER_DEVICE_PATH`.
 - Schema changes are Alembic-managed (`alembic/versions/`) — there is no

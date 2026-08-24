@@ -8,6 +8,7 @@ keyboard focus.
 
 import logging
 import threading
+from datetime import UTC, datetime
 from collections.abc import Callable
 
 from evdev import InputDevice, categorize, ecodes
@@ -40,6 +41,8 @@ class ScannerReader:
         self._on_scan = on_scan
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._connected = threading.Event()
+        self._last_scan_at: datetime | None = None
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -48,11 +51,20 @@ class ScannerReader:
     def stop(self) -> None:
         self._stop_event.set()
 
+    @property
+    def connected(self) -> bool:
+        return self._connected.is_set()
+
+    @property
+    def last_scan_at(self) -> datetime | None:
+        return self._last_scan_at
+
     def _run(self) -> None:
         while not self._stop_event.is_set():
             try:
                 self._read_loop()
             except OSError:
+                self._connected.clear()
                 logger.exception(
                     "Lost connection to scanner device %s; retrying", self._device_path
                 )
@@ -60,6 +72,7 @@ class ScannerReader:
 
     def _read_loop(self) -> None:
         device = InputDevice(self._device_path)
+        self._connected.set()
         buffer: list[str] = []
         shift_held = False
         for event in device.read_loop():
@@ -81,6 +94,7 @@ class ScannerReader:
 
             if key_code == "KEY_ENTER":
                 if buffer:
+                    self._last_scan_at = datetime.now(UTC)
                     self._on_scan("".join(buffer))
                     buffer.clear()
                 continue

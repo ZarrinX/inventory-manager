@@ -27,5 +27,10 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        # Every failed request leaves its session clean; callers never get a
+        # false-success response from a partially open transaction.
+        db.rollback()
+        raise
     finally:
         db.close()

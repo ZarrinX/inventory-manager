@@ -33,3 +33,34 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+def scan_payload(result: Any) -> dict[str, Any]:
+    """Serialize a scan using the WebSocket contract from spec §13."""
+    scan = result.event
+    assert scan is not None
+    product = result.product
+    identifier = result.identifier
+    payload: dict[str, Any] = {
+        "event": "barcode_scanned" if result.disposition == "active" else f"scan_{result.disposition}",
+        "scan_id": scan.id,
+        "code": scan.payload,
+        "format": scan.barcode_format or "UNKNOWN",
+        "timestamp": scan.scanned_at.isoformat(),
+        "queue_depth": result.queue_depth,
+        "resolution": {"known": product is not None},
+    }
+    if product:
+        payload["resolution"]["product"] = {
+            "id": product.id,
+            "manufacturer": product.manufacturer,
+            "product_line": product.product_line,
+            "cartridge": product.cartridge,
+            "bullet_weight_gr": product.bullet_weight_gr,
+            "bullet_type": product.bullet_type,
+            "rounds_per_box": identifier.rounds_per_package if identifier else None,
+            "upc": scan.payload,
+            "box_quantity": product.box_quantity,
+            "round_quantity": product.round_quantity,
+        }
+    return payload

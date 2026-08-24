@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Audit History — Inventory Manager</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Audit History</h1>
+    <a href="/">Inventory</a>
+  </header>
+  <form method="get" class="filter-form">
+    <input name="entity_type" placeholder="Entity type" value="{{ entity_type or '' }}" />
+    <input name="entity_id" type="number" placeholder="Entity ID" value="{{ entity_id or '' }}" />
+    <button type="submit">Filter</button>
+  </form>
+  <table>
+    <thead>
+      <tr><th>When</th><th>Entity</th><th>Action</th><th>Field</th><th>Old</th><th>New</th><th>Source</th></tr>
+    </thead>
+    <tbody>
+      {% for event in events %}
+      <tr>
+        <td>{{ event.created_at }}</td>
+        <td>{{ event.entity_type }} #{{ event.entity_id }}</td>
+        <td>{{ event.action }}</td>
+        <td>{{ event.field_key or '' }}</td>
+        <td>{{ event.old_value or '' }}</td>
+        <td>{{ event.new_value or '' }}</td>
+        <td>{{ event.source_type or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</body>
+</html>
