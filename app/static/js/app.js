@@ -21,6 +21,9 @@ const transactionError = document.getElementById("transaction-error");
 const transactionProduct = document.getElementById("transaction-product");
 const productDetailModal = document.getElementById("product-detail-modal");
 const productDetailContent = document.getElementById("product-detail-content");
+const editProductModal = document.getElementById("edit-product-modal");
+const editProductForm = document.getElementById("edit-product-form");
+const editProductError = document.getElementById("edit-product-error");
 const adminFieldsBody = document.querySelector("#admin-fields-table tbody");
 const adminFieldError = document.getElementById("admin-field-error");
 const locationsTableBody = document.querySelector("#locations-table tbody");
@@ -41,6 +44,7 @@ let inventoryPage = 1;
 let inventoryTotal = 0;
 let historyPage = 1;
 let historyDirection = "desc";
+let detailProductId = null;
 const productFieldKeys = new Set(["upc", "manufacturer", "product_line", "manufacturer_sku", "cartridge", "bullet_weight_gr", "bullet_type", "rounds_per_package", "description", "notes", "storage_location", "initial_box_quantity"]);
 const columnLabels = { manufacturer: "Manufacturer", product_line: "Product Line", manufacturer_sku: "Manufacturer SKU", cartridge: "Cartridge", bullet_weight_gr: "Bullet Weight", bullet_type: "Bullet Type", box_quantity: "Boxes", round_quantity: "Rounds" };
 
@@ -240,11 +244,41 @@ async function showProductDetail(productId) {
   const response = await fetch(`/api/ammo/${productId}`);
   if (!response.ok) return;
   const product = await response.json();
+  detailProductId = product.id;
   const identifiers = product.identifiers.map((item) => `<li>${item.upc} · ${item.rounds_per_package} rounds${item.active ? "" : " (inactive)"}</li>`).join("");
   const history = product.transactions.map((item) => `<tr><td>${new Date(item.created_at).toLocaleString()}</td><td>${item.transaction_type}</td><td>${item.box_delta}</td><td>${item.round_delta}</td><td>${item.new_box_balance}</td></tr>`).join("") || "<tr><td colspan=\"5\">No transactions</td></tr>";
   productDetailContent.innerHTML = `<dl class="product-summary"><dt>Manufacturer</dt><dd>${product.manufacturer}</dd><dt>Product line</dt><dd>${product.product_line || ""}</dd><dt>Cartridge</dt><dd>${product.cartridge}</dd><dt>Boxes</dt><dd>${product.box_quantity}</dd><dt>Rounds</dt><dd>${product.round_quantity}</dd></dl><h3>Package identifiers</h3><ul>${identifiers}</ul><h3>Transactions</h3><table><thead><tr><th>When</th><th>Type</th><th>Boxes</th><th>Rounds</th><th>Balance</th></tr></thead><tbody>${history}</tbody></table>`;
   productDetailModal.showModal();
 }
+
+async function openEditProduct() {
+  if (!detailProductId) return;
+  const response = await fetch(`/api/ammo/${detailProductId}`);
+  if (!response.ok) return;
+  const product = await response.json();
+  ["manufacturer", "product_line", "manufacturer_sku", "cartridge", "bullet_weight_gr", "bullet_type", "low_stock_threshold", "low_stock_threshold_unit", "description", "notes"].forEach((field) => {
+    editProductForm.elements[field].value = product[field] ?? "";
+  });
+  editProductError.textContent = "";
+  editProductModal.showModal();
+}
+
+editProductForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!detailProductId) return;
+  const form = new FormData(editProductForm);
+  const payload = Object.fromEntries(form.entries());
+  ["product_line", "manufacturer_sku", "bullet_type", "description", "notes", "low_stock_threshold_unit"].forEach((field) => {
+    if (payload[field] === "") payload[field] = null;
+  });
+  payload.bullet_weight_gr = payload.bullet_weight_gr === "" ? null : Number(payload.bullet_weight_gr);
+  payload.low_stock_threshold = payload.low_stock_threshold === "" ? null : Number(payload.low_stock_threshold);
+  const response = await fetch(`/api/ammo/${detailProductId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+  if (!response.ok) { editProductError.textContent = await responseError(response, "Product could not be updated."); return; }
+  editProductModal.close();
+  await loadInventory();
+  await showProductDetail(detailProductId);
+});
 
 async function loadHistory() {
   const params = new URLSearchParams({ page: historyPage, page_size: 50, sort: document.getElementById("history-sort").value, direction: historyDirection });
@@ -490,6 +524,8 @@ document.getElementById("next-page").addEventListener("click", () => { inventory
 document.getElementById("save-view").addEventListener("click", saveView);
 document.getElementById("reset-view").addEventListener("click", async () => { const response = await fetch("/api/preferences/inventory-view/reset", { method: "POST" }); if (response.ok) { inventoryView = await response.json(); inventoryPage = 1; populateViewControls(); loadInventory(); } });
 document.querySelector("[data-close-detail]").addEventListener("click", () => productDetailModal.close());
+document.getElementById("edit-product").addEventListener("click", openEditProduct);
+document.querySelectorAll("[data-close-edit-product]").forEach((button) => button.addEventListener("click", () => editProductModal.close()));
 [historySearch, document.getElementById("history-type"), document.getElementById("history-manufacturer"), document.getElementById("history-cartridge"), document.getElementById("history-product-id"), document.getElementById("history-source"), document.getElementById("history-date-from"), document.getElementById("history-date-to"), document.getElementById("history-sort")].forEach((field) => field.addEventListener(field.type === "search" || field.type === "text" || field.type === "number" ? "input" : "change", () => { historyPage = 1; loadHistory(); }));
 document.getElementById("history-sort-direction").addEventListener("click", () => { historyDirection = historyDirection === "desc" ? "asc" : "desc"; document.getElementById("history-sort-direction").textContent = historyDirection === "desc" ? "↓" : "↑"; loadHistory(); });
 document.getElementById("history-previous-page").addEventListener("click", () => { if (historyPage > 1) { historyPage--; loadHistory(); } });

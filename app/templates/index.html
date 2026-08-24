@@ -124,7 +124,27 @@
   </dialog>
 
   <dialog id="product-detail-modal" class="modal">
-    <div class="modal-content"><div class="modal-header"><h2>Inventory Detail</h2><button class="icon-button" type="button" data-close-detail aria-label="Close">×</button></div><div id="product-detail-content"></div></div>
+    <div class="modal-content"><div class="modal-header"><h2>Inventory Detail</h2><div><button id="edit-product" type="button">Edit</button><button class="icon-button" type="button" data-close-detail aria-label="Close">×</button></div></div><div id="product-detail-content"></div></div>
+  </dialog>
+
+  <dialog id="edit-product-modal" class="modal">
+    <form id="edit-product-form" method="dialog">
+      <div class="modal-header"><h2>Edit Ammunition</h2><button class="icon-button" type="button" data-close-edit-product aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field"><span>Manufacturer *</span><input name="manufacturer" required /></label>
+        <label class="field"><span>Product Line</span><input name="product_line" /></label>
+        <label class="field"><span>Manufacturer SKU</span><input name="manufacturer_sku" /></label>
+        <label class="field"><span>Cartridge / Caliber *</span><input name="cartridge" required /></label>
+        <label class="field"><span>Bullet Weight</span><input name="bullet_weight_gr" type="number" step="any" /></label>
+        <label class="field"><span>Bullet Type</span><input name="bullet_type" /></label>
+        <label class="field"><span>Low-stock threshold</span><input name="low_stock_threshold" type="number" min="0" step="any" /></label>
+        <label class="field"><span>Threshold unit</span><select name="low_stock_threshold_unit"><option value="">None</option><option value="boxes">Boxes</option><option value="rounds">Rounds</option></select></label>
+        <label class="field"><span>Description</span><textarea name="description"></textarea></label>
+        <label class="field"><span>Notes</span><textarea name="notes"></textarea></label>
+      </div>
+      <p id="edit-product-error" class="form-error" role="alert"></p>
+      <div class="modal-actions"><button type="button" data-close-edit-product>Cancel</button><button type="submit" class="primary">Save changes</button></div>
+    </form>
   </dialog>
 
   <script src="/static/js/app.js"></script>
