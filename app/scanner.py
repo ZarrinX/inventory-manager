@@ -7,6 +7,7 @@ keyboard focus.
 """
 
 import logging
+import select
 import threading
 from datetime import UTC, datetime
 from collections.abc import Callable
@@ -31,6 +32,7 @@ for _c in "abcdefghijklmnopqrstuvwxyz":
     _KEYMAP[f"KEY_{_c.upper()}"] = (_c, _c.upper())
 
 ScanCallback = Callable[[str], None]
+IDLE_RECONNECT_SECONDS = 60
 
 
 class ScannerReader:
@@ -75,30 +77,32 @@ class ScannerReader:
         self._connected.set()
         buffer: list[str] = []
         shift_held = False
-        for event in device.read_loop():
-            if self._stop_event.is_set():
-                break
-            if event.type != ecodes.EV_KEY:
-                continue
-            key_event = categorize(event)
-            key_code = key_event.keycode
-            if isinstance(key_code, list):
-                key_code = key_code[0]
-
-            if key_code in ("KEY_LEFTSHIFT", "KEY_RIGHTSHIFT"):
-                shift_held = key_event.keystate != key_event.key_up
-                continue
-
-            if key_event.keystate != key_event.key_down:
-                continue
-
-            if key_code == "KEY_ENTER":
-                if buffer:
-                    self._last_scan_at = datetime.now(UTC)
-                    self._on_scan("".join(buffer))
-                    buffer.clear()
-                continue
-
-            chars = _KEYMAP.get(key_code)
-            if chars:
-                buffer.append(chars[1] if shift_held else chars[0])
+        try:
+            while not self._stop_event.is_set():
+                ready, _, _ = select.select([device], [], [], IDLE_RECONNECT_SECONDS)
+                if not ready:
+                    logger.info("Scanner idle for %ss; reopening device", IDLE_RECONNECT_SECONDS)
+                    return
+                for event in device.read():
+                    if event.type != ecodes.EV_KEY:
+                        continue
+                    key_event = categorize(event)
+                    key_code = key_event.keycode
+                    if isinstance(key_code, list):
+                        key_code = key_code[0]
+                    if key_code in ("KEY_LEFTSHIFT", "KEY_RIGHTSHIFT"):
+                        shift_held = key_event.keystate != key_event.key_up
+                        continue
+                    if key_event.keystate != key_event.key_down:
+                        continue
+                    if key_code == "KEY_ENTER":
+                        if buffer:
+                            self._last_scan_at = datetime.now(UTC)
+                            self._on_scan("".join(buffer))
+                            buffer.clear()
+                        continue
+                    chars = _KEYMAP.get(key_code)
+                    if chars:
+                        buffer.append(chars[1] if shift_held else chars[0])
+        finally:
+            device.close()
