@@ -44,6 +44,14 @@ let historyDirection = "desc";
 const productFieldKeys = new Set(["upc", "manufacturer", "product_line", "manufacturer_sku", "cartridge", "bullet_weight_gr", "bullet_type", "rounds_per_package", "description", "notes", "storage_location", "initial_box_quantity"]);
 const columnLabels = { manufacturer: "Manufacturer", product_line: "Product Line", manufacturer_sku: "Manufacturer SKU", cartridge: "Cartridge", bullet_weight_gr: "Bullet Weight", bullet_type: "Bullet Type", box_quantity: "Boxes", round_quantity: "Rounds" };
 
+// Firefox restricts crypto.randomUUID() to secure contexts. The Pi is served
+// over HTTP on a private-network IP, so retain idempotency without requiring
+// HTTPS or browser-specific behavior.
+function requestId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `browser-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 function setWebsocketStatus(connected) {
   websocketStatus.textContent = connected ? "WebSocket connected" : "WebSocket reconnecting…";
   websocketStatus.classList.toggle("healthy", connected);
@@ -250,7 +258,7 @@ async function loadHistory() {
 
 async function reverseTransaction(transactionId) {
   if (!window.confirm("Create a compensating reversal transaction?")) return;
-  const response = await fetch(`/api/transactions/${transactionId}/reverse`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_request_id: crypto.randomUUID() }) });
+  const response = await fetch(`/api/transactions/${transactionId}/reverse`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_request_id: requestId() }) });
   if (!response.ok) { window.alert((await response.json().catch(() => ({}))).detail || "Transaction could not be reversed."); return; }
   loadHistory(); loadInventory();
 }
@@ -369,7 +377,7 @@ newProductForm.addEventListener("submit", async (event) => {
   product.rounds_per_package = Number(product.rounds_per_package);
   if (product.bullet_weight_gr === "") product.bullet_weight_gr = null;
   ["product_line", "manufacturer_sku", "bullet_type", "description", "notes"].forEach((field) => { if (product[field] === "") product[field] = null; });
-  const payload = { transaction_type: "RECEIVE", new_product: product, client_request_id: crypto.randomUUID() };
+  const payload = { transaction_type: "RECEIVE", new_product: product, client_request_id: requestId() };
   if (scanId) payload.scan_event_id = scanId;
   await submitTransaction(payload, newAmmoError, scanId);
 });
@@ -380,7 +388,7 @@ transactionForm.addEventListener("submit", async (event) => {
   const scanId = currentScanId;
   await submitTransaction({
     transaction_type: form.get("direction"), box_delta: Number(form.get("box_quantity")),
-    ammo_product_id: currentProduct.id, scan_event_id: scanId, client_request_id: crypto.randomUUID(),
+    ammo_product_id: currentProduct.id, scan_event_id: scanId, client_request_id: requestId(),
   }, transactionError, scanId);
 });
 
