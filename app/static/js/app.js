@@ -446,16 +446,18 @@ document.querySelectorAll(".nav-link").forEach((button) => button.addEventListen
 }));
 document.getElementById("create-field-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   const payload = { field_key: form.get("field_key"), display_name: form.get("display_name"), field_type: form.get("field_type"), value_type: form.get("value_type"), required: form.get("required") === "on", searchable: form.get("searchable") === "on" };
-  if (await adminRequest("/api/admin/fields", "POST", payload)) { event.currentTarget.reset(); loadAdminFields(); }
+  if (await adminRequest("/api/admin/fields", "POST", payload)) { formElement.reset(); loadAdminFields(); }
 });
 document.getElementById("create-location-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const formElement = event.currentTarget;
+  const form = new FormData(formElement);
   const response = await fetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: form.get("name"), parent_id: form.get("parent_id") ? Number(form.get("parent_id")) : null }) });
   if (!response.ok) { adminFieldError.textContent = await responseError(response, "Location could not be created."); return; }
-  event.currentTarget.reset(); loadLocations();
+  formElement.reset(); loadLocations();
 });
 async function runAmmoImport(commit) {
   const form = new FormData(ammoImportForm);
