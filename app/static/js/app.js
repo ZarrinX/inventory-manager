@@ -247,18 +247,30 @@ async function showProductDetail(productId) {
   if (!response.ok) return;
   const product = await response.json();
   const fieldsResponse = await fetch("/api/admin/fields");
+  let fieldDefinitions = [];
   if (fieldsResponse.ok) {
-    const fields = await fieldsResponse.json();
-    const cartridgeField = fields.find((field) => field.field_key === "cartridge");
+    fieldDefinitions = await fieldsResponse.json();
+    const cartridgeField = fieldDefinitions.find((field) => field.field_key === "cartridge");
     const options = cartridgeField?.options?.filter((option) => option.enabled) || [];
     editCartridge.replaceChildren(new Option("Select…", ""), ...options.map((option) => new Option(option.label, option.stable_key)));
     if (![...editCartridge.options].some((option) => option.value === product.cartridge)) editCartridge.add(new Option(product.cartridge, product.cartridge));
-    renderEditCustomFields(fields.filter((field) => !field.system_field && field.enabled), product.custom_fields || {});
+    renderEditCustomFields(fieldDefinitions.filter((field) => !field.system_field && field.enabled), product.custom_fields || {});
   }
   detailProductId = product.id;
   const identifiers = product.identifiers.map((item) => `<li>${item.upc} · ${item.rounds_per_package} rounds${item.active ? "" : " (inactive)"}</li>`).join("");
   const history = product.transactions.map((item) => `<tr><td>${new Date(item.created_at).toLocaleString()}</td><td>${item.transaction_type}</td><td>${item.box_delta}</td><td>${item.round_delta}</td><td>${item.new_box_balance}</td></tr>`).join("") || "<tr><td colspan=\"5\">No transactions</td></tr>";
-  productDetailContent.innerHTML = `<dl class="product-summary"><dt>Manufacturer</dt><dd>${product.manufacturer}</dd><dt>Product line</dt><dd>${product.product_line || ""}</dd><dt>Cartridge</dt><dd>${product.cartridge}</dd><dt>Boxes</dt><dd>${product.box_quantity}</dd><dt>Rounds</dt><dd>${product.round_quantity}</dd></dl><h3>Package identifiers</h3><ul>${identifiers}</ul><h3>Transactions</h3><table><thead><tr><th>When</th><th>Type</th><th>Boxes</th><th>Rounds</th><th>Balance</th></tr></thead><tbody>${history}</tbody></table>`;
+  const standardFields = [
+    ["Manufacturer", product.manufacturer], ["Product line", product.product_line], ["Manufacturer SKU", product.manufacturer_sku],
+    ["Cartridge / Caliber", product.cartridge], ["Bullet weight", product.bullet_weight_gr], ["Bullet type", product.bullet_type],
+    ["Description", product.description], ["Notes", product.notes], ["Low-stock threshold", product.low_stock_threshold == null ? null : `${product.low_stock_threshold} ${product.low_stock_threshold_unit || ""}`],
+    ["Current boxes", product.box_quantity], ["Current rounds", product.round_quantity],
+  ];
+  const customFields = fieldDefinitions.filter((field) => !field.system_field).map((field) => [
+    `${field.display_name}${field.unit ? ` (${field.unit})` : ""}`,
+    product.custom_fields?.[field.field_key],
+  ]);
+  const detailRows = [...standardFields, ...customFields].map(([label, value]) => `<dt>${label}</dt><dd>${value ?? "—"}</dd>`).join("");
+  productDetailContent.innerHTML = `<dl class="product-summary">${detailRows}</dl><h3>Package identifiers</h3><ul>${identifiers}</ul><h3>Transactions</h3><table><thead><tr><th>When</th><th>Type</th><th>Boxes</th><th>Rounds</th><th>Balance</th></tr></thead><tbody>${history}</tbody></table>`;
   productDetailModal.showModal();
 }
 
