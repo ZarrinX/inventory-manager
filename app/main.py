@@ -11,9 +11,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.broadcast import manager
 from app.config import settings
 from app.db import SessionLocal, get_db
-from app.models import AmmoPackageIdentifier, AmmoProduct, ScanEvent
+from app.models import AmmoProduct
 from app.routers import ammo
 from app.scanner import ScannerReader
+from app.services import scan_service
 
 logger = logging.getLogger(__name__)
 
@@ -28,22 +29,7 @@ def _handle_scan(payload: str, loop: asyncio.AbstractEventLoop) -> None:
     itself (spec §3.1) — that only happens via a confirmed transaction."""
     db: Session = SessionLocal()
     try:
-        identifier = db.scalar(
-            select(AmmoPackageIdentifier).where(
-                AmmoPackageIdentifier.upc == payload, AmmoPackageIdentifier.active.is_(True)
-            )
-        )
-        product = None
-        if identifier:
-            product = db.scalar(
-                select(AmmoProduct)
-                .options(selectinload(AmmoProduct.identifiers))
-                .where(AmmoProduct.id == identifier.ammo_product_id)
-            )
-
-        event = ScanEvent(payload=payload, ammo_product_id=product.id if product else None)
-        db.add(event)
-        db.commit()
+        event, product = scan_service.record_scan(db, payload)
 
         result = {
             "upc": payload,

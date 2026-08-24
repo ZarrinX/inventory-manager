@@ -67,24 +67,19 @@ required by §24.1.
 
 ## Phase 2 — Service Layer
 
-> Note: `app/routers/ammo.py` currently contains minimal, inlined versions of
-> product-creation and transaction-creation logic to keep Phase 1 testable
-> end-to-end. It does not yet have idempotency, reversal, or the dedicated
-> service/repository split below — that's this phase's job.
-
 Introduce the service layer so routes and the scanner handler share one set
 of business rules (§14, §22.5).
 
-- [ ] `app/services/` package: `identifier_service` (UPC → product
+- [x] `app/services/` package: `identifier_service` (UPC → product
       resolution), `inventory_service` (balance calculations,
       transaction creation), `scan_service` (scan lifecycle, queue,
-      debounce)
-- [ ] `app/repositories/` (or keep repository logic in services if the
+      debounce — queue/debounce itself still lands in Phase 3)
+- [x] `app/repositories/` (or keep repository logic in services if the
       project stays small) for DB access used by both HTTP routes and the
-      scanner callback
-- [ ] Reorganize `app/models.py` → `app/models/` package if it grows large
-      enough to warrant splitting
-- [ ] Reorganize `app/schemas.py` → `app/schemas/` similarly
+      scanner callback — kept in services, project is small enough
+- [x] Reorganize `app/models.py` → `app/models/` package if it grows large
+      enough to warrant splitting (done in Phase 1)
+- [x] Reorganize `app/schemas.py` → `app/schemas/` similarly
 
 ## Phase 3 — Scan Workflow
 

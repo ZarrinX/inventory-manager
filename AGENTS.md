@@ -38,7 +38,8 @@ for the phased implementation checklist — check items off there as work lands.
 | `app/main.py` | FastAPI app, lifespan startup (starts scanner thread), routes |
 | `app/scanner.py` | Background thread reading the HID device via evdev |
 | `app/models/` | SQLAlchemy models split by concern (ammo, transactions, scan, fields, location, preferences, audit) |
-| `app/routers/ammo.py` | Minimal REST API: list/create products, lookup by UPC, create transactions |
+| `app/services/` | Business logic shared by routers and the scanner handler (identifier resolution, transaction creation, scan recording) |
+| `app/routers/ammo.py` | Thin REST API: list/create products, lookup by UPC, create transactions — delegates to `app/services/` |
 | `app/broadcast.py` | WebSocket connection manager for live scan push |
 | `alembic/` | Migrations — schema is Alembic-managed, no `create_all()` in production |
 | `docker-compose.yml` | `app` + `postgres` services for local dev and deployment |

@@ -3,8 +3,6 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models import TransactionType
-
 
 class AmmoPackageIdentifierOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -50,31 +48,3 @@ class AmmoProductCreate(BaseModel):
     description: str | None = None
     notes: str | None = None
     initial_box_quantity: int = 0
-
-
-class InventoryTransactionCreate(BaseModel):
-    transaction_type: TransactionType
-    box_delta: int
-    notes: str | None = None
-
-
-class InventoryTransactionOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    ammo_product_id: int
-    transaction_type: TransactionType
-    box_delta: int
-    round_delta: int
-    previous_box_balance: int
-    new_box_balance: int
-    previous_round_balance: int
-    new_round_balance: int
-    notes: str | None = None
-    created_at: datetime.datetime
-
-
-class ScanResult(BaseModel):
-    upc: str
-    scanned_at: datetime.datetime
-    product: AmmoProductOut | None = None
