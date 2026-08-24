@@ -52,6 +52,21 @@ function requestId() {
   return `browser-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function formatErrorDetail(detail, fallback) {
+  if (Array.isArray(detail)) {
+    return detail.map((error) => {
+      const field = error.loc?.filter((part) => part !== "body").join(" ");
+      return field ? `${field}: ${error.msg || "Invalid value"}` : (error.msg || "Invalid value");
+    }).join(" ");
+  }
+  return typeof detail === "string" ? detail : fallback;
+}
+
+async function responseError(response, fallback) {
+  const body = await response.json().catch(() => ({}));
+  return formatErrorDetail(body.detail, fallback);
+}
+
 function setWebsocketStatus(connected) {
   websocketStatus.textContent = connected ? "WebSocket connected" : "WebSocket reconnecting…";
   websocketStatus.classList.toggle("healthy", connected);
@@ -259,7 +274,7 @@ async function loadHistory() {
 async function reverseTransaction(transactionId) {
   if (!window.confirm("Create a compensating reversal transaction?")) return;
   const response = await fetch(`/api/transactions/${transactionId}/reverse`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ client_request_id: requestId() }) });
-  if (!response.ok) { window.alert((await response.json().catch(() => ({}))).detail || "Transaction could not be reversed."); return; }
+  if (!response.ok) { window.alert(await responseError(response, "Transaction could not be reversed.")); return; }
   loadHistory(); loadInventory();
 }
 
@@ -272,7 +287,7 @@ async function loadAdminFields() {
     [field.display_name, `${field.field_key} · ${field.system_field ? "system" : "custom"}`, `${field.field_type} / ${field.value_type}`, field.required ? "Yes" : "No", field.enabled ? "Yes" : "No", field.searchable ? "Yes" : "No"].forEach((value) => { const cell = document.createElement("td"); cell.textContent = value; row.appendChild(cell); });
     const actions = document.createElement("td");
     const edit = document.createElement("button"); edit.type = "button"; edit.textContent = "Edit"; edit.addEventListener("click", () => editField(field)); actions.appendChild(edit);
-    if (field.field_type === "DROPDOWN") {
+    if (field.field_type === "dropdown") {
       const option = document.createElement("button"); option.type = "button"; option.textContent = "Add option"; option.addEventListener("click", () => addDropdownOption(field.id)); actions.appendChild(option);
       field.options.forEach((item) => { const editOption = document.createElement("button"); editOption.type = "button"; editOption.textContent = `${item.label} (${item.enabled ? "on" : "off"})`; editOption.addEventListener("click", () => editDropdownOption(field.id, item)); actions.appendChild(editOption); });
     }
@@ -301,7 +316,7 @@ async function editLocation(location) {
   const name = window.prompt("Location name", location.name); if (name === null) return;
   const parentValue = window.prompt("Parent location ID (blank for none)", location.parent_id || ""); if (parentValue === null) return;
   const response = await fetch(`/api/locations/${location.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, parent_id: parentValue ? Number(parentValue) : null }) });
-  if (!response.ok) { adminFieldError.textContent = (await response.json().catch(() => ({}))).detail || "Location update failed."; return; }
+  if (!response.ok) { adminFieldError.textContent = await responseError(response, "Location update failed."); return; }
   loadLocations();
 }
 
@@ -313,7 +328,7 @@ async function retireLocation(locationId) {
 
 async function adminRequest(url, method, body) {
   const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-  if (!response.ok) { adminFieldError.textContent = (await response.json().catch(() => ({}))).detail || "Admin update failed."; return null; }
+  if (!response.ok) { adminFieldError.textContent = await responseError(response, "Admin update failed."); return null; }
   adminFieldError.textContent = ""; return response;
 }
 
@@ -347,8 +362,7 @@ async function deleteField(fieldId) {
 async function submitTransaction(payload, errorElement, scanId) {
   const response = await fetch("/api/transactions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    errorElement.textContent = error.detail || "Transaction could not be completed.";
+    errorElement.textContent = await responseError(response, "Transaction could not be completed.");
     return null;
   }
   const result = await response.json();
@@ -440,7 +454,7 @@ document.getElementById("create-location-form").addEventListener("submit", async
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   const response = await fetch("/api/locations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: form.get("name"), parent_id: form.get("parent_id") ? Number(form.get("parent_id")) : null }) });
-  if (!response.ok) { adminFieldError.textContent = (await response.json().catch(() => ({}))).detail || "Location could not be created."; return; }
+  if (!response.ok) { adminFieldError.textContent = await responseError(response, "Location could not be created."); return; }
   event.currentTarget.reset(); loadLocations();
 });
 async function runAmmoImport(commit) {
@@ -448,7 +462,7 @@ async function runAmmoImport(commit) {
   if (!form.get("file")?.name) return;
   const response = await fetch(`/api/data/import/ammo.csv?commit=${commit}`, { method: "POST", body: form });
   const result = await response.json().catch(() => ({}));
-  importResult.textContent = response.ok ? `${commit ? "Imported" : "Dry run"}: ${result.valid || 0} valid of ${result.rows || 0}; ${result.errors?.length || 0} errors.` : result.detail || "Import failed.";
+  importResult.textContent = response.ok ? `${commit ? "Imported" : "Dry run"}: ${result.valid || 0} valid of ${result.rows || 0}; ${result.errors?.length || 0} errors.` : formatErrorDetail(result.detail, "Import failed.");
   if (response.ok && commit) loadInventory();
 }
 ammoImportForm.addEventListener("submit", (event) => { event.preventDefault(); runAmmoImport(false); });
@@ -460,7 +474,7 @@ restoreBackupForm.addEventListener("submit", async (event) => {
   try {
     const backup = JSON.parse(await file.text());
     const response = await fetch("/api/data/restore?confirm_replace=true", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(backup) });
-    document.getElementById("restore-result").textContent = response.ok ? "Backup restored." : (await response.json().catch(() => ({}))).detail || "Restore failed.";
+    document.getElementById("restore-result").textContent = response.ok ? "Backup restored." : await responseError(response, "Restore failed.");
     if (response.ok) { loadInventory(); loadAdminFields(); loadLocations(); }
   } catch (_) { document.getElementById("restore-result").textContent = "Choose a valid JSON backup file."; }
 });
