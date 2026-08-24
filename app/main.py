@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     global _scanner
     # Schema is managed by Alembic migrations (see alembic/), not created here.
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         _scanner = ScannerReader(
             settings.scanner_device_path, lambda payload: _handle_scan(payload, loop)

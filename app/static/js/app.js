@@ -581,4 +581,7 @@ document.getElementById("history-next-page").addEventListener("click", () => { h
 connect();
 refreshScannerStatus();
 setInterval(refreshScannerStatus, 5000);
+// WebSocket delivery is the fast path. Polling the durable active-scan state
+// is the recovery path for a dropped notification or a browser reconnect.
+setInterval(revalidateActiveScan, 2000);
 loadView();
