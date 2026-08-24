@@ -5,7 +5,7 @@ from app.models import (
     FieldValueType, InventoryTransaction, TransactionType,
 )
 from app.schemas import InventoryTransactionCreate, TransactionReverseRequest
-from app.services import inventory_service
+from app.services import inventory_service, metadata_service
 from app.services.errors import NegativeInventoryError
 
 
@@ -75,3 +75,20 @@ def test_new_product_satisfies_seeded_required_upc_field(db):
         },
     ))
     assert result.product.box_quantity == 1
+
+
+def test_deleting_a_product_releases_its_upc_for_a_new_record(db):
+    item = product(db)
+    product_id = item.id
+    metadata_service.soft_delete_product(db, product_id)
+    db.rollback()
+
+    recreated = inventory_service.submit_transaction(db, InventoryTransactionCreate(
+        transaction_type=TransactionType.RECEIVE,
+        new_product={
+            "upc": "012345678905", "manufacturer": "New Federal",
+            "cartridge": "9mm", "rounds_per_package": 50,
+            "initial_box_quantity": 1,
+        },
+    ))
+    assert recreated.product.id != product_id

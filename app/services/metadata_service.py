@@ -53,7 +53,11 @@ def soft_delete_product(db: Session, product_id: int) -> AmmoProduct:
         if product.deleted_at is None:
             _change(db, product, "AmmoProduct", "deleted_at", datetime.now(UTC), action="DELETE")
         for identifier in product.identifiers:
-            _change(db, identifier, "AmmoPackageIdentifier", "active", False, action="DELETE")
+            # UPCs are globally unique. Purge package identifiers on deletion
+            # so the same physical package can later be added as a new record,
+            # while the soft-deleted product and its transaction history remain.
+            _change(db, identifier, "AmmoPackageIdentifier", "upc", None, action="DELETE")
+            db.delete(identifier)
     db.refresh(product)
     return product
 
