@@ -90,7 +90,7 @@ def index(request: Request, db: Session = Depends(get_db)):
     )
     form_fields = list(
         db.scalars(
-            select(FieldDefinition)
+            select(FieldDefinition).options(selectinload(FieldDefinition.options))
             .where(FieldDefinition.enabled.is_(True))
             .order_by(FieldDefinition.sort_order)
         )

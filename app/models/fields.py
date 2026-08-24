@@ -55,6 +55,7 @@ class FieldDefinition(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     searchable: Mapped[bool] = mapped_column(Boolean, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # True for the built-in fields listed in spec §5.2 (UPC, Manufacturer, ...).
     system_field: Mapped[bool] = mapped_column(Boolean, default=False)
     # Type-specific config (e.g. decimal precision); shape depends on field_type.

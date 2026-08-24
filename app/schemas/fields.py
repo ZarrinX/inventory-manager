@@ -11,6 +11,7 @@ class DropdownOptionOut(BaseModel):
     stable_key: str
     label: str
     sort_order: int
+    unit: str | None = None
     enabled: bool
 
 
@@ -39,6 +40,7 @@ class FieldDefinitionCreate(BaseModel):
     enabled: bool = True
     searchable: bool = False
     sort_order: int = 100
+    unit: str | None = Field(default=None, max_length=32)
     configuration: dict | None = None
 
     @model_validator(mode="after")
@@ -58,6 +60,7 @@ class FieldDefinitionUpdate(BaseModel):
     enabled: bool | None = None
     searchable: bool | None = None
     sort_order: int | None = None
+    unit: str | None = Field(default=None, max_length=32)
     configuration: dict | None = None
 
 

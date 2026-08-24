@@ -24,6 +24,7 @@ const productDetailContent = document.getElementById("product-detail-content");
 const editProductModal = document.getElementById("edit-product-modal");
 const editProductForm = document.getElementById("edit-product-form");
 const editProductError = document.getElementById("edit-product-error");
+const editCartridge = document.getElementById("edit-cartridge");
 const adminFieldsBody = document.querySelector("#admin-fields-table tbody");
 const adminFieldError = document.getElementById("admin-field-error");
 const locationsTableBody = document.querySelector("#locations-table tbody");
@@ -244,6 +245,13 @@ async function showProductDetail(productId) {
   const response = await fetch(`/api/ammo/${productId}`);
   if (!response.ok) return;
   const product = await response.json();
+  const fieldsResponse = await fetch("/api/admin/fields");
+  if (fieldsResponse.ok) {
+    const cartridgeField = (await fieldsResponse.json()).find((field) => field.field_key === "cartridge");
+    const options = cartridgeField?.options?.filter((option) => option.enabled) || [];
+    editCartridge.replaceChildren(new Option("Select…", ""), ...options.map((option) => new Option(option.label, option.stable_key)));
+    if (![...editCartridge.options].some((option) => option.value === product.cartridge)) editCartridge.add(new Option(product.cartridge, product.cartridge));
+  }
   detailProductId = product.id;
   const identifiers = product.identifiers.map((item) => `<li>${item.upc} · ${item.rounds_per_package} rounds${item.active ? "" : " (inactive)"}</li>`).join("");
   const history = product.transactions.map((item) => `<tr><td>${new Date(item.created_at).toLocaleString()}</td><td>${item.transaction_type}</td><td>${item.box_delta}</td><td>${item.round_delta}</td><td>${item.new_box_balance}</td></tr>`).join("") || "<tr><td colspan=\"5\">No transactions</td></tr>";
@@ -368,11 +376,12 @@ async function adminRequest(url, method, body) {
 
 async function editField(field) {
   const display_name = window.prompt("Display name", field.display_name); if (display_name === null) return;
+  const unit = window.prompt("Unit label (for example FPS; blank for none)", field.unit || ""); if (unit === null) return;
   const required = window.confirm(`Required?\nOK = required, Cancel = optional\nCurrent: ${field.required ? "required" : "optional"}`);
   const enabled = window.confirm(`Enabled?\nOK = enabled, Cancel = disabled\nCurrent: ${field.enabled ? "enabled" : "disabled"}`);
   const searchable = window.confirm(`Searchable?\nOK = searchable, Cancel = not searchable\nCurrent: ${field.searchable ? "searchable" : "not searchable"}`);
   const sort_order = window.prompt("Display order", field.sort_order); if (sort_order === null) return;
-  if (await adminRequest(`/api/admin/fields/${field.id}`, "PATCH", { display_name, required, enabled, searchable, sort_order: Number(sort_order) })) loadAdminFields();
+  if (await adminRequest(`/api/admin/fields/${field.id}`, "PATCH", { display_name, unit: unit || null, required, enabled, searchable, sort_order: Number(sort_order) })) loadAdminFields();
 }
 
 async function addDropdownOption(fieldId) {
@@ -482,7 +491,7 @@ document.getElementById("create-field-form").addEventListener("submit", async (e
   event.preventDefault();
   const formElement = event.currentTarget;
   const form = new FormData(formElement);
-  const payload = { field_key: form.get("field_key"), display_name: form.get("display_name"), field_type: form.get("field_type"), value_type: form.get("value_type"), required: form.get("required") === "on", searchable: form.get("searchable") === "on" };
+  const payload = { field_key: form.get("field_key"), display_name: form.get("display_name"), field_type: form.get("field_type"), value_type: form.get("value_type"), unit: form.get("unit") || null, required: form.get("required") === "on", searchable: form.get("searchable") === "on" };
   if (await adminRequest("/api/admin/fields", "POST", payload)) { formElement.reset(); loadAdminFields(); }
 });
 document.getElementById("create-location-form").addEventListener("submit", async (event) => {
@@ -525,6 +534,14 @@ document.getElementById("save-view").addEventListener("click", saveView);
 document.getElementById("reset-view").addEventListener("click", async () => { const response = await fetch("/api/preferences/inventory-view/reset", { method: "POST" }); if (response.ok) { inventoryView = await response.json(); inventoryPage = 1; populateViewControls(); loadInventory(); } });
 document.querySelector("[data-close-detail]").addEventListener("click", () => productDetailModal.close());
 document.getElementById("edit-product").addEventListener("click", openEditProduct);
+document.getElementById("delete-product").addEventListener("click", async () => {
+  if (!detailProductId || !window.confirm("Delete this inventory record? It will be removed from inventory, but its transaction history will be retained.")) return;
+  const response = await fetch(`/api/ammo/${detailProductId}`, { method: "DELETE" });
+  if (!response.ok) { window.alert(await responseError(response, "Product could not be deleted.")); return; }
+  productDetailModal.close();
+  detailProductId = null;
+  await loadInventory();
+});
 document.querySelectorAll("[data-close-edit-product]").forEach((button) => button.addEventListener("click", () => editProductModal.close()));
 [historySearch, document.getElementById("history-type"), document.getElementById("history-manufacturer"), document.getElementById("history-cartridge"), document.getElementById("history-product-id"), document.getElementById("history-source"), document.getElementById("history-date-from"), document.getElementById("history-date-to"), document.getElementById("history-sort")].forEach((field) => field.addEventListener(field.type === "search" || field.type === "text" || field.type === "number" ? "input" : "change", () => { historyPage = 1; loadHistory(); }));
 document.getElementById("history-sort-direction").addEventListener("click", () => { historyDirection = historyDirection === "desc" ? "asc" : "desc"; document.getElementById("history-sort-direction").textContent = historyDirection === "desc" ? "↓" : "↑"; loadHistory(); });

@@ -61,7 +61,7 @@
       <h2>Admin: Fields</h2>
       <form id="create-field-form" class="inventory-controls">
         <input name="field_key" placeholder="field_key" required pattern="[a-z][a-z0-9_]+" />
-        <input name="display_name" placeholder="Display name" required />
+        <input name="display_name" placeholder="Display name" required /><input name="unit" placeholder="Unit (e.g. FPS)" maxlength="32" />
         <label>Control <select name="field_type"><option value="text">Text</option><option value="checkbox">Checkbox</option><option value="dropdown">Dropdown</option></select></label>
         <label>Value <select name="value_type"><option value="text">Text</option><option value="number">Number</option><option value="boolean">Boolean</option></select></label>
         <label><input name="required" type="checkbox" /> Required</label><label><input name="searchable" type="checkbox" /> Searchable</label>
@@ -91,7 +91,7 @@
       <div class="form-grid">
         {% for field in form_fields %}
         <label class="field" data-field-key="{{ field.field_key }}" data-value-type="{{ field.value_type.value }}">
-          <span>{{ field.display_name }}{% if field.required %} <b aria-label="required">*</b>{% endif %}</span>
+          <span>{{ field.display_name }}{% if field.unit %} <small>({{ field.unit }})</small>{% endif %}{% if field.required %} <b aria-label="required">*</b>{% endif %}</span>
           {% if field.field_key == "storage_location" %}
           <select name="storage_location" {% if field.required %}required{% endif %}><option value="">No location</option>{% for location in locations %}<option value="{{ location.id }}">{{ location.name }}</option>{% endfor %}</select>
           {% elif field.field_type.value == "checkbox" %}
@@ -124,7 +124,7 @@
   </dialog>
 
   <dialog id="product-detail-modal" class="modal">
-    <div class="modal-content"><div class="modal-header"><h2>Inventory Detail</h2><div><button id="edit-product" type="button">Edit</button><button class="icon-button" type="button" data-close-detail aria-label="Close">×</button></div></div><div id="product-detail-content"></div></div>
+    <div class="modal-content"><div class="modal-header"><h2>Inventory Detail</h2><div><button id="edit-product" type="button">Edit</button><button id="delete-product" type="button" class="danger">Delete</button><button class="icon-button" type="button" data-close-detail aria-label="Close">×</button></div></div><div id="product-detail-content"></div></div>
   </dialog>
 
   <dialog id="edit-product-modal" class="modal">
@@ -134,7 +134,7 @@
         <label class="field"><span>Manufacturer *</span><input name="manufacturer" required /></label>
         <label class="field"><span>Product Line</span><input name="product_line" /></label>
         <label class="field"><span>Manufacturer SKU</span><input name="manufacturer_sku" /></label>
-        <label class="field"><span>Cartridge / Caliber *</span><input name="cartridge" required /></label>
+        <label class="field"><span>Cartridge / Caliber *</span><select name="cartridge" id="edit-cartridge" required><option value="">Select…</option></select></label>
         <label class="field"><span>Bullet Weight</span><input name="bullet_weight_gr" type="number" step="any" /></label>
         <label class="field"><span>Bullet Type</span><input name="bullet_type" /></label>
         <label class="field"><span>Low-stock threshold</span><input name="low_stock_threshold" type="number" min="0" step="any" /></label>
