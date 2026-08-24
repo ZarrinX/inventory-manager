@@ -10,6 +10,31 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-inventory}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-inventory}
+      POSTGRES_USER: ${POSTGRES_USER:-inventory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      SCANNER_DEVICE_PATH: ${SCANNER_DEVICE_PATH:-/dev/input/by-id/usb-Scanner_Barcode_0215-event-kbd}
+    devices:
+      - "${SCANNER_DEVICE_PATH:-/dev/input/by-id/usb-Scanner_Barcode_0215-event-kbd}:${SCANNER_DEVICE_PATH:-/dev/input/by-id/usb-Scanner_Barcode_0215-event-kbd}"
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres-data:
