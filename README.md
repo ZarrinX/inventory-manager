@@ -26,6 +26,31 @@ requirements and [todo.md](todo.md) for implementation status.
 - Product deletion keeps the product and transaction audit trail but removes its
   UPC identifiers, allowing a deleted UPC to be added later as a new product.
 
+## Interface
+
+### Dashboard and inventory
+
+![Dashboard and inventory](screenshots/dashboard.png)
+
+Click an inventory row to view its complete metadata, package identifiers, and
+transaction history.
+
+### Edit inventory
+
+![Edit inventory record](screenshots/edit_inventory.png)
+
+### Confirm inventory transactions
+
+![Inventory transaction confirmation](screenshots/inventory_transaction.png)
+
+### Transaction history
+
+![Transaction history](screenshots/transaction_history.png)
+
+### Administration
+
+![Field and location administration](screenshots/admin.png)
+
 ## Architecture
 
 | Layer | Responsibility |
