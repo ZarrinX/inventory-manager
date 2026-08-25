@@ -26,6 +26,10 @@ const editProductForm = document.getElementById("edit-product-form");
 const editProductError = document.getElementById("edit-product-error");
 const editCartridge = document.getElementById("edit-cartridge");
 const editCustomFields = document.getElementById("edit-custom-fields");
+const editFieldModal = document.getElementById("edit-field-modal");
+const editFieldForm = document.getElementById("edit-field-form");
+const editFieldError = document.getElementById("edit-field-error");
+let editingFieldId = null;
 const adminFieldsBody = document.querySelector("#admin-fields-table tbody");
 const adminFieldError = document.getElementById("admin-field-error");
 const locationsTableBody = document.querySelector("#locations-table tbody");
@@ -417,14 +421,27 @@ async function adminRequest(url, method, body) {
 }
 
 async function editField(field) {
-  const display_name = window.prompt("Display name", field.display_name); if (display_name === null) return;
-  const unit = window.prompt("Unit label (for example FPS; blank for none)", field.unit || ""); if (unit === null) return;
-  const required = window.confirm(`Required?\nOK = required, Cancel = optional\nCurrent: ${field.required ? "required" : "optional"}`);
-  const enabled = window.confirm(`Enabled?\nOK = enabled, Cancel = disabled\nCurrent: ${field.enabled ? "enabled" : "disabled"}`);
-  const searchable = window.confirm(`Searchable?\nOK = searchable, Cancel = not searchable\nCurrent: ${field.searchable ? "searchable" : "not searchable"}`);
-  const sort_order = window.prompt("Display order", field.sort_order); if (sort_order === null) return;
-  if (await adminRequest(`/api/admin/fields/${field.id}`, "PATCH", { display_name, unit: unit || null, required, enabled, searchable, sort_order: Number(sort_order) })) loadAdminFields();
+  editingFieldId = field.id;
+  editFieldForm.elements.field_key.value = field.field_key;
+  editFieldForm.elements.display_name.value = field.display_name;
+  editFieldForm.elements.unit.value = field.unit || "";
+  editFieldForm.elements.sort_order.value = field.sort_order;
+  editFieldForm.elements.required.checked = field.required;
+  editFieldForm.elements.enabled.checked = field.enabled;
+  editFieldForm.elements.searchable.checked = field.searchable;
+  editFieldError.textContent = "";
+  editFieldModal.showModal();
 }
+
+editFieldForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!editingFieldId) return;
+  const form = new FormData(editFieldForm);
+  const payload = { display_name: form.get("display_name"), unit: form.get("unit") || null, sort_order: Number(form.get("sort_order")), required: form.get("required") === "on", enabled: form.get("enabled") === "on", searchable: form.get("searchable") === "on" };
+  const response = await adminRequest(`/api/admin/fields/${editingFieldId}`, "PATCH", payload);
+  if (!response) { editFieldError.textContent = adminFieldError.textContent; return; }
+  editFieldModal.close(); editingFieldId = null; loadAdminFields();
+});
 
 async function addDropdownOption(fieldId) {
   const stable_key = window.prompt("Stable option key (lowercase_underscores)"); if (!stable_key) return;
@@ -585,6 +602,7 @@ document.getElementById("delete-product").addEventListener("click", async () => 
   await loadInventory();
 });
 document.querySelectorAll("[data-close-edit-product]").forEach((button) => button.addEventListener("click", () => editProductModal.close()));
+document.querySelectorAll("[data-close-edit-field]").forEach((button) => button.addEventListener("click", () => editFieldModal.close()));
 [historySearch, document.getElementById("history-type"), document.getElementById("history-manufacturer"), document.getElementById("history-cartridge"), document.getElementById("history-product-id"), document.getElementById("history-source"), document.getElementById("history-date-from"), document.getElementById("history-date-to"), document.getElementById("history-sort")].forEach((field) => field.addEventListener(field.type === "search" || field.type === "text" || field.type === "number" ? "input" : "change", () => { historyPage = 1; loadHistory(); }));
 document.getElementById("history-sort-direction").addEventListener("click", () => { historyDirection = historyDirection === "desc" ? "asc" : "desc"; document.getElementById("history-sort-direction").textContent = historyDirection === "desc" ? "↓" : "↑"; loadHistory(); });
 document.getElementById("history-previous-page").addEventListener("click", () => { if (historyPage > 1) { historyPage--; loadHistory(); } });

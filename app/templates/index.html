@@ -148,6 +148,23 @@
     </form>
   </dialog>
 
+  <dialog id="edit-field-modal" class="modal">
+    <form id="edit-field-form" method="dialog">
+      <div class="modal-header"><h2>Edit Field</h2><button class="icon-button" type="button" data-close-edit-field aria-label="Close">×</button></div>
+      <div class="form-grid">
+        <label class="field"><span>Field key</span><input name="field_key" readonly /></label>
+        <label class="field"><span>Display name</span><input name="display_name" required /></label>
+        <label class="field"><span>Unit</span><input name="unit" maxlength="32" placeholder="FPS" /></label>
+        <label class="field"><span>Sort order</span><input name="sort_order" type="number" required /></label>
+        <label><input name="required" type="checkbox" /> Required</label>
+        <label><input name="enabled" type="checkbox" /> Enabled</label>
+        <label><input name="searchable" type="checkbox" /> Searchable</label>
+      </div>
+      <p id="edit-field-error" class="form-error" role="alert"></p>
+      <div class="modal-actions"><button type="button" data-close-edit-field>Cancel</button><button type="submit" class="primary">Save field</button></div>
+    </form>
+  </dialog>
+
   <script src="/static/js/app.js"></script>
 </body>
 </html>
